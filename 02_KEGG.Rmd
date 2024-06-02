@@ -1,0 +1,136 @@
+---
+title: "02_KEGG"
+documentclass: ctexart
+output:
+  bookdown::pdf_book:
+    latex_engine: xelatex
+  html_document: default
+date: "2024-05-28"
+---
+
+# KEGG enrichment analysis {#clusterprofiler-kegg}
+
+KEGG（京都基因和基因组百科全书）富集分析， 用于根据 KEGG 通路数据库确定与特定生物通路或分子功能相关的基因在统计学上的显著富集。
+
+KEGG 是一个数据库资源，提供各种生物通路的信息，包括代谢通路、信号通路和疾病相关通路，用于从分子水平的信息，特别是基因组测序和其他高通量实验技术产生的大规模分子数据集，了解生物系统（如细胞、生物体和生态系统）的高层次功能和效用。 KEGG 富集分析将来自基因表达谱分析或全基因组关联研究等高通量实验数据的相关基因列表与代表 KEGG 通路的预定义基因组进行比较。 这种分析的目的是确定某些通路在输入基因列表中的代表性或富集程度是否高于偶然的预期。
+
+KEGG 富集分析的结果通常包括显著富集的 KEGG 通路列表，以及 P 值或误差发现率（FDR）等统计量度，这些量度表示随机机会观察到富集的可能性。这种分析有助于研究人员深入了解可能失调或与所研究的实验条件相关的生物过程或通路。
+
+```{r include=FALSE}
+library(knitr)
+opts_chunk$set(message=FALSE, warning=FALSE, eval=TRUE, echo=TRUE, cache=TRUE)
+library(clusterProfiler)
+```
+
+The KEGG FTP service is not freely available for academic use since 2012, and there are many software packages using out-dated KEGG annotation data. The `"clusterProfiler"` package supports downloading the latest online version of KEGG data using the [KEGG website](https://www.kegg.jp), which is freely available for academic users. Both the KEGG pathway and module are supported in `"clusterProfiler"`.
+
+## Supported organisms {#clusterProfiler-kegg-supported-organisms}
+
+The `"clusterProfiler"` package supports all organisms that have KEGG annotation data available in the KEGG database. Users should pass an abbreviation of academic name to the `organism` parameter. The full list of KEGG supported organisms can be accessed via <http://www.genome.jp/kegg/catalog/org_list.html>. [KEGG Orthology](https://www.genome.jp/kegg/ko.html) (KO) Database is also supported by specifying `organism = "ko"`.
+
+The `"clusterProfiler"` package provides `search_kegg_organism()` function to help searching supported organisms.
+
+```{r}
+search_kegg_organism("rno", by='kegg_code')
+rat <- search_kegg_organism('rat', by='common_name')
+rattus <- search_kegg_organism('Rattus norvegicus', by = "scientific_name")
+dim(rat); dim(rattus)
+head(rat); head(rattus)
+```
+
+## KEGG pathway over-representation analysis {#clusterprofiler-kegg-pathway-ora}
+
+```{r}
+geneList <- readRDS("outputs/geneList.rds")
+gene <- names(geneList)
+
+organisms <- "org.Rn.eg.db"
+library(package = organisms, character.only = T)
+
+gene.df <- bitr(gene, fromType = "SYMBOL",
+                toType = c("ENTREZID"),
+                OrgDb = organisms)
+
+kk <- enrichKEGG(gene         = gene.df$ENTREZID,
+                 organism     = "rno",
+                 pvalueCutoff = 0.05)
+kk <- setReadable(kk, OrgDb = organisms, keyType = "ENTREZID")
+head(kk)
+```
+
+Input ID type can be `kegg`, `ncbi-geneid`, `ncbi-proteinid` or `uniprot` (see also [session 16.1.2](#bitr_kegg)). Unlike `enrichGO()`, there is no `readable` parameter for `enrichKEGG()`. However, users can use the [`setReadable()` function](#setReadable) if there is an `OrgDb` available for the species.
+
+## KEGG pathway gene set enrichment analysis {#clusterprofiler-kegg-pathway-gsea}
+
+```{r}
+names(geneList) <- gene.df$ENTREZID
+geneList <- geneList[!duplicated(names(geneList))]
+kk2 <- gseKEGG(geneList     = geneList,
+               organism     = "rno",
+               minGSSize    = 20,
+               pvalueCutoff = 1,
+               verbose      = FALSE)
+head(kk2)
+```
+
+## KEGG module over-representation analysis {#clusterprofiler-kegg-module-ora}
+
+[KEGG Module](http://www.genome.jp/kegg/module.html) is a collection of manually defined function units. In some situation, KEGG Modules have a more straightforward interpretation.
+
+```{r}
+mkk <- enrichMKEGG(gene = gene.df$ENTREZID,
+                   organism = "rno",
+                   pvalueCutoff = 1,
+                   qvalueCutoff = 1)
+mkk <- setReadable(mkk, OrgDb = organisms, keyType = "ENTREZID")
+head(mkk)                   
+```
+
+## KEGG module gene set enrichment analysis {#clusterprofiler-kegg-module-gsea}
+
+```{r}
+mkk2 <- gseMKEGG(geneList = geneList,
+                 organism = "rno",
+                 pvalueCutoff = 1)
+head(mkk2)
+```
+
+## Visualize enriched KEGG pathways
+
+The `"enrichplot"` package implements [several methods](#enrichplot) to visualize enriched terms. Most of them are general methods that can be used on GO, KEGG, MSigDb, and other gene set annotations. Here, we introduce the `clusterProfiler::browseKEGG()` and `pathview::pathview()` functions to help users explore enriched KEGG pathways with genes of interest.
+
+To view the KEGG pathway, users can use the `browseKEGG` function, which will open a web browser and highlight enriched genes.
+
+```{r eval=FALSE}
+browseKEGG(kk, 'rno05166')
+```
+
+<!-- (ref:browseKEGGscap) Explore selected KEGG pathway. -->
+
+<!-- (ref:browseKEGGcap) **Explore selected KEGG pathway.** Differentially expressed genes that are enriched in the selected pathway will be highlighted. -->
+
+<!-- ```{r browseKEGG, out.width="100%", echo=FALSE, fig.cap="(ref:browseKEGGcap)", fig.scap="(ref:browseKEGGscap)"} -->
+
+<!-- knitr::include_graphics("figures/browseKEGG.png") -->
+
+<!-- ``` -->
+
+Users can also use the `pathview()` function from the `"pathview"` [@luo_pathview] to visualize enriched KEGG pathways identified by the `"clusterProfiler"` package [@yu2012].
+
+The following example illustrates how to visualize the "hsa04110" pathway, which was enriched in our previous analysis.
+
+```{r eval=FALSE}
+library("pathview")
+hsa04110 <- pathview(gene.data  = geneList,
+                     pathway.id = "rno05166",
+                     species    = "rno",
+                     limit      = list(gene=max(abs(geneList)), cpd=1))
+```
+
+(ref:pathviewscap) Visualze selected KEGG pathway by `pathview()`.
+
+(ref:pathviewcap) **Visualize selected KEGG pathway by `pathview()`.** Gene expression values can be mapped to gradient color scale.
+
+```{r pathview, out.width="100%", echo=FALSE, fig.cap="(ref:pathviewcap)", fig.scap="(ref:pathviewscap)"}
+knitr::include_graphics("rno05166.pathview.png")
+```
